@@ -1,0 +1,78 @@
+version: '3.3'
+services:
+  db:
+    image: postgres:12
+    volumes:
+      - dbdata:/var/lib/postgresql/data/pgdata
+    env_file:
+      - .env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    networks:
+      - mlflow
+      - traefik-public
+    # deploy:
+    #   placement:
+    #     constraints:
+    #       - node.labels.${STACK_NAME?Variable not set}.dbdata == true
+  pgadmin:
+    image: dpage/pgadmin4:4.29
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    networks:
+      - mlflow
+      - traefik-public
+    # depends_on:
+      # - db
+    env_file:
+      - .env
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik-public
+        - traefik.constraint-label=traefik-public
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-http.rule=Host(`pgadmin.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-http.entrypoints=http
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-http.middlewares=https-redirect
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-https.rule=Host(`pgadmin.${DOMAIN?Variable not set}`)
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-https.entrypoints=https
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-https.tls=true
+        - traefik.http.routers.${STACK_NAME?Variable not set}-pgadmin-https.tls.certresolver=le
+        - traefik.http.services.${STACK_NAME?Variable not set}-pgadmin.loadbalancer.server.port=5050
+
+  tracker:
+      image: larribas/mlflow:1.9.1
+      environment: 
+          - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+          - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+          - AWS_DEFAULT_REGION=${AWS_REGION}
+          - MLFLOW_S3_ENDPOINT_URL=https://s3.yvictor.ml
+      env_file:
+        - .env
+      networks:
+          - mlflow
+          - traefik-public
+      entrypoint: mlflow server --backend-store-uri postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB} --default-artifact-root s3://${AWS_BUCKET_NAME}/ -h 0.0.0.0 -p 3919
+      deploy:
+        labels:
+          - traefik.enable=true
+          - traefik.docker.network=traefik-public
+          - traefik.constraint-label=traefik-public
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-https.middlewares=admin-auth
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-http.middlewares=https-redirect
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-http.entrypoints=http
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-http.rule=Host(`mlflow.${DOMAIN?Variable not set}`)
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-https.entrypoints=https
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-https.rule=Host(`mlflow.${DOMAIN?Variable not set}`)
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-https.tls=true
+          - traefik.http.routers.${STACK_NAME?Variable not set}-tracker-https.tls.certresolver=le
+          - traefik.http.services.${STACK_NAME?Variable not set}-tracker.loadbalancer.server.port=3919
+
+volumes:
+  dbdata:
+  pgadmin-data:
+
+networks:
+  mlflow:
+  traefik-public:
+    external: true
