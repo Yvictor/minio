@@ -41,7 +41,7 @@ services:
         - traefik.http.services.${STACK_NAME?Variable not set}-pgadmin.loadbalancer.server.port=5050
 
   tracker:
-      image: yvictor/mlflow:latest
+      image: yvictor/mlflow:1.13.1
       environment: 
           - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
           - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
